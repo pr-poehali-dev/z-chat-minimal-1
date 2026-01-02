@@ -1,0 +1,49 @@
+{
+  "tests": [
+    {
+      "name": "Get all chats",
+      "method": "GET",
+      "path": "/?path=chats",
+      "headers": {
+        "X-User-Id": "6"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "chats": "array"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get messages for chat",
+      "method": "GET",
+      "path": "/?path=messages/1",
+      "headers": {
+        "X-User-Id": "6"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "messages": "array"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Send new message",
+      "method": "POST",
+      "path": "/?path=messages",
+      "headers": {
+        "X-User-Id": "6",
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "chatId": 1,
+        "text": "Test message"
+      },
+      "expectedStatus": 201,
+      "expectedBody": {
+        "text": "Test message",
+        "isOwn": true
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

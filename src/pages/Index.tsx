@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { api } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 type Message = {
   id: number;
@@ -30,24 +32,72 @@ type Chat = {
 
 const Index = () => {
   const [activeSection, setActiveSection] = useState<'chats' | 'contacts' | 'channels' | 'archive' | 'profile' | 'settings'>('chats');
-  const [selectedChat, setSelectedChat] = useState<number | null>(1);
+  const [selectedChat, setSelectedChat] = useState<number | null>(null);
   const [messageText, setMessageText] = useState('');
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const { toast } = useToast();
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
-  const chats: Chat[] = [
-    { id: 1, name: 'Анна Соколова', avatar: '👩‍💼', lastMessage: 'Отлично, встретимся завтра!', time: '14:32', unread: 2, online: true, pinned: true },
-    { id: 2, name: 'Команда разработки', avatar: '💻', lastMessage: 'Дмитрий: Деплой завершен успешно', time: '13:15', unread: 5 },
-    { id: 3, name: 'Максим Петров', avatar: '👨‍🎨', lastMessage: 'Отправил новые макеты', time: '11:20', online: true },
-    { id: 4, name: 'Мама ❤️', avatar: '👵', lastMessage: 'Как дела, солнышко?', time: 'Вчера', pinned: true },
-    { id: 5, name: 'Спортзал', avatar: '🏋️', lastMessage: 'Напоминание: завтра тренировка', time: 'Вчера', muted: true },
-  ];
+  useEffect(() => {
+    const isDark = localStorage.getItem('darkMode') === 'true';
+    setIsDarkMode(isDark);
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    }
+    loadChats();
+  }, []);
 
-  const messages: Message[] = [
-    { id: 1, text: 'Привет! Как дела с проектом?', time: '14:20', isOwn: false, status: 'read' },
-    { id: 2, text: 'Отлично! Уже почти закончил дизайн', time: '14:25', isOwn: true, status: 'read', reactions: ['👍', '🔥'] },
-    { id: 3, text: 'Круто! Можешь показать превью?', time: '14:30', isOwn: false, status: 'read' },
-    { id: 4, text: 'Конечно, отправлю через 5 минут', time: '14:31', isOwn: true, status: 'delivered' },
-    { id: 5, text: 'Отлично, встретимся завтра!', time: '14:32', isOwn: false, status: 'sent' },
-  ];
+  useEffect(() => {
+    if (selectedChat) {
+      loadMessages(selectedChat);
+    }
+  }, [selectedChat]);
+
+  const toggleDarkMode = () => {
+    const newMode = !isDarkMode;
+    setIsDarkMode(newMode);
+    localStorage.setItem('darkMode', String(newMode));
+    if (newMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
+
+  const loadChats = async () => {
+    try {
+      const data = await api.getChats();
+      setChats(data.chats);
+      if (data.chats.length > 0 && !selectedChat) {
+        setSelectedChat(data.chats[0].id);
+      }
+    } catch (error) {
+      toast({ title: 'Ошибка', description: 'Не удалось загрузить чаты', variant: 'destructive' });
+    }
+  };
+
+  const loadMessages = async (chatId: number) => {
+    try {
+      const data = await api.getMessages(chatId);
+      setMessages(data.messages);
+    } catch (error) {
+      toast({ title: 'Ошибка', description: 'Не удалось загрузить сообщения', variant: 'destructive' });
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (messageText.trim() && selectedChat) {
+      try {
+        const newMessage = await api.sendMessage(selectedChat, messageText);
+        setMessages([...messages, newMessage]);
+        setMessageText('');
+        await loadChats();
+      } catch (error) {
+        toast({ title: 'Ошибка', description: 'Не удалось отправить сообщение', variant: 'destructive' });
+      }
+    }
+  };
 
   const contacts = [
     { id: 1, name: 'Анна Соколова', avatar: '👩‍💼', status: 'онлайн' },
@@ -61,13 +111,6 @@ const Index = () => {
     { id: 2, name: 'Дизайн и UX', avatar: '🎨', subscribers: '8.2K' },
     { id: 3, name: 'Стартапы России', avatar: '🚀', subscribers: '25.1K' },
   ];
-
-  const handleSendMessage = () => {
-    if (messageText.trim()) {
-      console.log('Sending:', messageText);
-      setMessageText('');
-    }
-  };
 
   const renderSidebarContent = () => {
     switch (activeSection) {
@@ -109,7 +152,7 @@ const Index = () => {
                     </div>
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-muted-foreground truncate">{chat.lastMessage}</p>
-                      {chat.unread && (
+                      {chat.unread && chat.unread > 0 && (
                         <Badge variant="default" className="ml-2 rounded-full h-5 min-w-5 px-1.5 text-xs">
                           {chat.unread}
                         </Badge>
@@ -215,9 +258,10 @@ const Index = () => {
                   <Icon name="Lock" size={20} />
                   <span className="text-sm">Приватность</span>
                 </div>
-                <div className="flex items-center gap-3 p-3 hover:bg-accent/50 rounded-lg cursor-pointer">
+                <div className="flex items-center gap-3 p-3 hover:bg-accent/50 rounded-lg cursor-pointer" onClick={toggleDarkMode}>
                   <Icon name="Palette" size={20} />
                   <span className="text-sm">Темы оформления</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{isDarkMode ? 'Темная' : 'Светлая'}</span>
                 </div>
               </div>
             </ScrollArea>
@@ -232,9 +276,10 @@ const Index = () => {
             </div>
             <ScrollArea className="h-[calc(100vh-140px)]">
               <div className="p-4 space-y-1">
-                <div className="flex items-center gap-3 p-3 hover:bg-accent/50 rounded-lg cursor-pointer">
+                <div className="flex items-center gap-3 p-3 hover:bg-accent/50 rounded-lg cursor-pointer" onClick={toggleDarkMode}>
                   <Icon name="Monitor" size={20} />
                   <span className="text-sm">Внешний вид</span>
+                  <span className="ml-auto text-xs text-muted-foreground">{isDarkMode ? '🌙' : '☀️'}</span>
                 </div>
                 <div className="flex items-center gap-3 p-3 hover:bg-accent/50 rounded-lg cursor-pointer">
                   <Icon name="Languages" size={20} />
